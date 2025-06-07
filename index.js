@@ -42,7 +42,8 @@ app.post('/submit', async (req, res) => {
     console.log("🖱 Clicking the register button...");
     await page.click('#register_btn');
 
-    await page.waitForTimeout(3000);
+    // Replaced page.waitForTimeout with safe version
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
     await browser.close();
     console.log("✅ Form submitted successfully");
