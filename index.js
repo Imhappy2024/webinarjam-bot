@@ -6,11 +6,7 @@ app.use(express.json());
 
 app.post('/submit', async (req, res) => {
   const { name, email, phone } = req.body;
-
-  console.log("➡️ New request received:", { name, email, phone });
-
   if (!name || !email || !phone) {
-    console.log("❌ Missing fields");
     return res.status(400).send('Missing required fields');
   }
 
@@ -28,30 +24,53 @@ app.post('/submit', async (req, res) => {
       timeout: 60000,
     });
 
-    // Wait for form elements to load
-    await page.waitForSelector('input[placeholder="First name..."]');
-    await page.waitForSelector('input[placeholder="Email..."]');
-    await page.waitForSelector('input[placeholder="Enter phone number..."]');
-    await page.waitForSelector('#register_btn');
+    // Wait for the Turnstile CAPTCHA container to load
+    console.log("🧩 Waiting for Turnstile CAPTCHA...");
+    await page.waitForSelector('#js-turnstile-captcha', { timeout: 15000 });
 
-    console.log("✍️ Typing into fields...");
-    await page.type('input[placeholder="First name..."]', name);
-    await page.type('input[placeholder="Email..."]', email);
-    await page.type('input[placeholder="Enter phone number..."]', phone);
+    // Wait a few seconds to let Cloudflare auto-solve (if allowed)
+    console.log("⏳ Waiting for Turnstile token to auto-resolve...");
+    await new Promise(resolve => setTimeout(resolve, 6000));
 
-    console.log("🖱 Clicking the register button...");
-    await page.click('#register_btn');
+    // Get the CAPTCHA token from Turnstile
+    const token = await page.evaluate(() => {
+      return window.turnstile?.getResponse();
+    });
 
-    // Replaced page.waitForTimeout with safe version
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    if (!token) {
+      throw new Error("❌ CAPTCHA token not found — Cloudflare may be challenging this request.");
+    }
+
+    console.log("🔐 CAPTCHA token obtained:", token.slice(0, 10) + "...");
+
+    // Submit the form using JavaScript directly inside the page
+    const status = await page.evaluate(async ({ name, email, phone, token }) => {
+      const response = await fetch('https://event.webinarjam.com/webinarRegistrations/8m266cnlc00s52cosv', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: name,
+          email: email,
+          phone: phone,
+          turnstileToken: token
+        })
+      });
+      return response.status;
+    }, { name, email, phone, token });
 
     await browser.close();
-    console.log("✅ Form submitted successfully");
-    res.send('✅ Success');
+
+    if (status === 200) {
+      console.log(`✅ ${email} registered successfully`);
+      res.send('✅ Success');
+    } else {
+      console.log(`❌ WebinarJam rejected registration. Status: ${status}`);
+      res.status(status).send('❌ Submission rejected by WebinarJam');
+    }
   } catch (err) {
     await browser.close();
-    console.error("❌ Puppeteer error:", err.message);
-    res.status(500).send('❌ Internal Server Error: ' + err.message);
+    console.error("❌ Error:", err.message);
+    res.status(500).send('❌ Internal Error: ' + err.message);
   }
 });
 
