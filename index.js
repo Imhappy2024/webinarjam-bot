@@ -9,7 +9,6 @@ app.post('/submit', async (req, res) => {
 
   console.log("➡️ New request received:", { name, email, phone });
 
-  // Check if required fields are present
   if (!name || !email || !phone) {
     console.log("❌ Missing fields");
     return res.status(400).send('Missing required fields');
@@ -25,38 +24,37 @@ app.post('/submit', async (req, res) => {
     console.log("🌐 Navigating to WebinarJam...");
 
     await page.goto('https://event.webinarjam.com/login/8m266cnlc00s52cosv', {
-      waitUntil: 'networkidle2',
+      waitUntil: 'domcontentloaded',
+      timeout: 60000,
     });
 
-    // Wait for form fields
-    await page.waitForSelector('input[placeholder="Enter the webinar room"]');
-    await page.waitForSelector('input[type="email"]');
-    await page.waitForSelector('input[type="tel"]');
-    await page.waitForSelector('button');
+    // Wait for form elements to load
+    await page.waitForSelector('input[placeholder="First name..."]');
+    await page.waitForSelector('input[placeholder="Email..."]');
+    await page.waitForSelector('input[placeholder="Enter phone number..."]');
+    await page.waitForSelector('#register_btn');
 
-    console.log("✍️ Typing values...");
+    console.log("✍️ Typing into fields...");
+    await page.type('input[placeholder="First name..."]', name);
+    await page.type('input[placeholder="Email..."]', email);
+    await page.type('input[placeholder="Enter phone number..."]', phone);
 
-    await page.type('input[placeholder="Enter the webinar room"]', name);
-    await page.type('input[type="email"]', email);
-    await page.type('input[type="tel"]', phone);
+    console.log("🖱 Clicking the register button...");
+    await page.click('#register_btn');
 
-    console.log("🖱 Clicking Enter button...");
-    await page.click('button');
-
-    // Wait to simulate success
     await page.waitForTimeout(3000);
 
     await browser.close();
-    console.log("✅ Submitted successfully");
+    console.log("✅ Form submitted successfully");
     res.send('✅ Success');
   } catch (err) {
     await browser.close();
-    console.error("❌ Puppeteer error:", err);
+    console.error("❌ Puppeteer error:", err.message);
     res.status(500).send('❌ Internal Server Error: ' + err.message);
   }
 });
 
 app.get('/', (req, res) => res.send('🟢 WebinarJam bot is running.'));
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
